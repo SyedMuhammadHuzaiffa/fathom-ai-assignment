@@ -6,6 +6,7 @@
 - Canary logs:
   - `.agent-logs/2026-09-13_16-30-17_01a09b9a-d944-7e10-9154-c5de9ee635b4.md`
   - `.agent-logs/2026-09-13_16-30-52_01a09b9b-6181-7103-88ad-f066108321ee.md`
+- Final implementation recheck: `.agent-logs/2026-09-13_16-33-06_01a09b9d-6db3-7dc1-a73d-5ab70ac4a4ed.md` also captured its complete pair after transient pairing state was moved outside the repository.
 - First attempt that did not work: the first canary launch ran in the filesystem sandbox and Codex could not write its session-state database under `~/.codex` (`attempt to write a readonly database`). It did not send a prompt and created no capture entry. The subsequent independent canary launches were permitted outside that sandbox, with hook trust explicitly bypassed solely for the test.
 
 ## Canary 1 — raw entries

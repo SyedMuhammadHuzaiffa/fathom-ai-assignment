@@ -8,13 +8,16 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = ROOT / ".agent-logs"
-STATE_DIR = ROOT / ".codex" / ".capture-state"
+STATE_DIR = Path(tempfile.gettempdir()) / "codex-8x-capture-state" / re.sub(
+    r"[^A-Za-z0-9._-]", "-", str(ROOT)
+)
 
 
 def utc_now() -> str:

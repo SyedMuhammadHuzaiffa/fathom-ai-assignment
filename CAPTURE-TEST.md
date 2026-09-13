@@ -14,6 +14,7 @@ The hook implementation passes in three independent Codex CLI sessions. A fresh 
 - First attempts that did not work:
   - The first canary launch ran in the filesystem sandbox and Codex could not write its session-state database under `~/.codex` (`attempt to write a readonly database`). It did not send a prompt and created no capture entry. The subsequent independent CLI canary launches were permitted outside that sandbox, with hook trust explicitly bypassed solely for the test.
   - The fresh desktop-task canary completed but correctly did not fire the untrusted project hook. It produced no log entry and is not represented as a canary capture below.
+  - An automated terminal attempt to open `/hooks` could not render Codex's interactive review UI because the available terminal reports `TERM=dumb`. Trust must therefore be granted from the normal Codex desktop or CLI interface, not by a scripted terminal invocation.
 
 ## Canary 1 — raw entries
 

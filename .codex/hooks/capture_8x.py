@@ -29,19 +29,7 @@ def clean_filename(value: str) -> str:
 
 
 def git_author() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "config", "user.name"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except OSError:
-        pass
-    return os.environ.get("USER", "unknown")
+    return "SyedMuhammadHuzaiffa"
 
 
 def state_path(session_id: str) -> Path:

@@ -1,0 +1,25 @@
+{
+  "description": "Automatically capture 8x-assignment prompts and final responses.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/capture_8x.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/capture_8x.py"
+          }
+        ]
+      }
+    ]
+  }
+}

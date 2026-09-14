@@ -23,9 +23,9 @@ import {
 
 const mainNav = [
   { label: "My Calls", icon: Video, href: "/" },
-  { label: "Team Calls", icon: Users, href: "/team" },
-  { label: "Ask Fathom", icon: Sparkles, href: "/ask" },
-  { label: "Playlists", icon: FolderKanban, href: "/playlists" },
+  { label: "Team Calls", icon: Users, unavailable: true },
+  { label: "Ask Fathom", icon: Sparkles, unavailable: true },
+  { label: "Playlists", icon: FolderKanban, unavailable: true },
 ];
 
 const secondaryNav = [
@@ -76,10 +76,27 @@ export function AppShell({ children }: { children: ReactNode }) {
             {mainNav.map((item) => {
               const Icon = item.icon;
               const active = item.href === "/" && (pathname === "/" || pathname.startsWith("/meetings/"));
+              if (item.unavailable) {
+                return (
+                  <button
+                    className="nav-unavailable"
+                    type="button"
+                    key={item.label}
+                    disabled
+                    aria-disabled="true"
+                    aria-label={`${item.label} is not included in this demo`}
+                    title="Not included in this demo"
+                  >
+                    <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
+                    <span>{item.label}</span>
+                    <span className="nav-beta">Coming soon</span>
+                  </button>
+                );
+              }
               return (
                 <Link
                   className={active ? "active" : ""}
-                  href={item.href}
+                  href={item.href ?? "/"}
                   key={item.label}
                   onClick={() => setIsOpen(false)}
                 >

@@ -175,6 +175,7 @@ a {
 }
 
 .primary-nav a,
+.primary-nav button,
 .secondary-nav button,
 .utility-links button {
   display: flex;
@@ -192,6 +193,7 @@ a {
 }
 
 .primary-nav a:hover,
+.primary-nav button:hover,
 .secondary-nav button:hover,
 .utility-links button:hover {
   background: #202124;
@@ -205,6 +207,24 @@ a {
 }
 
 .primary-nav a.active svg { color: var(--cyan); }
+
+.primary-nav .nav-unavailable {
+  color: #686b72;
+  cursor: not-allowed;
+}
+
+.primary-nav .nav-unavailable:disabled { opacity: 1; }
+
+.primary-nav .nav-unavailable:hover {
+  background: transparent;
+  color: #686b72;
+}
+
+.primary-nav .nav-unavailable .nav-beta {
+  border-color: rgba(174, 176, 182, 0.18);
+  background: rgba(174, 176, 182, 0.08);
+  color: #858890;
+}
 
 .nav-beta {
   margin-left: auto;

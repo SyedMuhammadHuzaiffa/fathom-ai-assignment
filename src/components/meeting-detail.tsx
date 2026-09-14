@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
+  BarChart3,
   CalendarDays,
   Check,
   CheckSquare2,
@@ -13,8 +14,12 @@ import {
   Flag,
   Headphones,
   ListChecks,
+  MessageCircleQuestion,
   Pause,
   Play,
+  RefreshCw,
+  Scissors,
+  Send,
   Settings2,
   Share2,
   Sparkles,
@@ -23,10 +28,19 @@ import {
 } from "lucide-react";
 import type { Meeting } from "@/data/meetings";
 import { formatDuration, formatMeetingDate } from "@/lib/formatters";
-import type { ShareableMoment } from "@/lib/sharing";
+import { getTranscriptClip, type ShareableClip, type ShareableMoment } from "@/lib/sharing";
 import { ShareDialog } from "@/components/share-dialog";
 
 type SummaryTemplate = "enhanced" | "demo";
+
+type AskSource = { timestamp: string; label: string };
+type AskAnswer = { text: string; sources: AskSource[] };
+
+const suggestedQuestions = [
+  "What were the main decisions?",
+  "What should I follow up on?",
+  "What risks were mentioned?",
+];
 
 const summaryTemplates: Record<SummaryTemplate, { label: string; description: string }> = {
   enhanced: {
@@ -59,6 +73,42 @@ function formatPlaybackTime(totalSeconds: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function buildMeetingAnswer(meeting: Meeting, question: string): AskAnswer {
+  const normalized = question.toLowerCase();
+  const sourceForTimestamp = (timestamp: string, label: string) => ({ timestamp, label });
+
+  if (/follow|action|next step|todo|to-do|owner/.test(normalized)) {
+    return {
+      text: meeting.actionItems.length
+        ? meeting.actionItems.map((action) => `${action.owner}: ${action.task}`).join(" ")
+        : "No explicit follow-up items were captured for this meeting.",
+      sources: meeting.actionItems
+        .filter((action) => action.timestamp)
+        .slice(0, 3)
+        .map((action) => sourceForTimestamp(action.timestamp!, action.owner)),
+    };
+  }
+
+  if (/risk|concern|block|depend|issue|problem/.test(normalized)) {
+    const riskSections = meeting.summary.filter((section) => /risk|depend|issue|block|quality/i.test(`${section.heading} ${section.body}`));
+    const riskLines = meeting.transcript.filter((line) => /risk|approval|security|degrad|latency|depend|regression|gap/i.test(line.text));
+    return {
+      text: riskSections.length
+        ? riskSections.map((section) => `${section.heading}: ${section.body}`).join(" ")
+        : riskLines.length
+          ? `The discussion flagged: ${riskLines.slice(0, 2).map((line) => line.text).join(" ")}`
+          : "No explicit risks were captured in the seeded notes or transcript.",
+      sources: riskLines.slice(0, 3).map((line) => sourceForTimestamp(line.timestamp, line.speaker)),
+    };
+  }
+
+  const summaryText = meeting.summary.map((section) => `${section.heading}: ${section.body}`).join(" ");
+  return {
+    text: summaryText,
+    sources: meeting.highlights.slice(0, 3).map((highlight) => sourceForTimestamp(highlight.timestamp, highlight.title)),
+  };
+}
+
 export function MeetingDetail({ meeting }: { meeting: Meeting }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -66,12 +116,21 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [customizationOpen, setCustomizationOpen] = useState(false);
   const [isSwitchingTemplate, setIsSwitchingTemplate] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [completedActions, setCompletedActions] = useState<Set<number>>(() => new Set());
   const [focusedTimestamp, setFocusedTimestamp] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareableMoment | null | undefined>(undefined);
+  const [shareClip, setShareClip] = useState<ShareableClip | undefined>(undefined);
+  const [clipMode, setClipMode] = useState(false);
+  const [clipSelection, setClipSelection] = useState<{ start: number | null; end: number | null }>({ start: null, end: null });
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askAnswer, setAskAnswer] = useState<AskAnswer | null>(null);
+  const [isAnswering, setIsAnswering] = useState(false);
   const currentTimeRef = useRef(0);
   const transcriptRefs = useRef(new Map<string, HTMLLIElement>());
   const templateTimerRef = useRef<number | null>(null);
+  const regenerateTimerRef = useRef<number | null>(null);
+  const askTimerRef = useRef<number | null>(null);
   const focusTimerRef = useRef<number | null>(null);
 
   const transcript = useMemo(
@@ -100,6 +159,35 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
     return actions;
   }, [meeting.actionItems]);
 
+  const talkTime = useMemo(() => {
+    const secondsBySpeaker = new Map(meeting.participants.map((participant) => [participant.name, 0]));
+
+    transcript.forEach((line, index) => {
+      const nextTimestamp = transcript[index + 1]?.seconds ?? meeting.durationSeconds;
+      const turnDuration = Math.max(0, nextTimestamp - line.seconds);
+      secondsBySpeaker.set(line.speaker, (secondsBySpeaker.get(line.speaker) ?? 0) + turnDuration);
+    });
+
+    const measuredSeconds = Array.from(secondsBySpeaker.values()).reduce((total, seconds) => total + seconds, 0);
+    return meeting.participants.map((participant) => {
+      const seconds = secondsBySpeaker.get(participant.name) ?? 0;
+      return {
+        participant,
+        seconds,
+        percentage: measuredSeconds > 0 ? (seconds / measuredSeconds) * 100 : 0,
+      };
+    });
+  }, [meeting.durationSeconds, meeting.participants, transcript]);
+
+  const selectedClip = useMemo(() => {
+    if (clipSelection.start === null || clipSelection.end === null) return undefined;
+    return getTranscriptClip(
+      meeting,
+      transcript[clipSelection.start]?.timestamp,
+      transcript[clipSelection.end]?.timestamp,
+    );
+  }, [clipSelection, meeting, transcript]);
+
   const activeIndex = transcript.findLastIndex((line) => line.seconds <= currentTime);
   const playbackProgress = (currentTime / meeting.durationSeconds) * 100;
 
@@ -118,6 +206,8 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
 
   useEffect(() => () => {
     if (templateTimerRef.current) window.clearTimeout(templateTimerRef.current);
+    if (regenerateTimerRef.current) window.clearTimeout(regenerateTimerRef.current);
+    if (askTimerRef.current) window.clearTimeout(askTimerRef.current);
     if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
   }, []);
 
@@ -156,6 +246,50 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
     setSummaryTemplate(template);
     if (templateTimerRef.current) window.clearTimeout(templateTimerRef.current);
     templateTimerRef.current = window.setTimeout(() => setIsSwitchingTemplate(false), 220);
+  };
+
+  const regenerateSummary = () => {
+    setTemplateMenuOpen(false);
+    setCustomizationOpen(false);
+    setIsRegenerating(true);
+    if (regenerateTimerRef.current) window.clearTimeout(regenerateTimerRef.current);
+    regenerateTimerRef.current = window.setTimeout(() => setIsRegenerating(false), 900);
+  };
+
+  const startClipSelection = () => {
+    setClipMode(true);
+    setClipSelection({ start: null, end: null });
+  };
+
+  const stopClipSelection = () => {
+    setClipMode(false);
+    setClipSelection({ start: null, end: null });
+  };
+
+  const selectTranscriptTurn = (index: number) => {
+    if (!clipMode) {
+      seekTo(transcript[index].seconds);
+      return;
+    }
+
+    setClipSelection((selection) => {
+      if (selection.start === null || selection.end !== null) return { start: index, end: null };
+      return { start: Math.min(selection.start, index), end: Math.max(selection.start, index) };
+    });
+  };
+
+  const askMeeting = (question: string) => {
+    const trimmedQuestion = question.trim();
+    if (!trimmedQuestion) return;
+
+    setAskQuestion(trimmedQuestion);
+    setAskAnswer(null);
+    setIsAnswering(true);
+    if (askTimerRef.current) window.clearTimeout(askTimerRef.current);
+    askTimerRef.current = window.setTimeout(() => {
+      setAskAnswer(buildMeetingAnswer(meeting, trimmedQuestion));
+      setIsAnswering(false);
+    }, 650);
   };
 
   const toggleAction = (index: number) => {
@@ -273,8 +407,51 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
               <p className="eyebrow">Conversation</p>
               <h2 id="transcript-heading">Transcript</h2>
             </div>
-            <span>{meeting.transcript.length} turns</span>
+            <div className="transcript-heading-actions">
+              <span>{meeting.transcript.length} turns</span>
+              <button
+                aria-pressed={clipMode}
+                className={clipMode ? "active" : ""}
+                onClick={clipMode ? stopClipSelection : startClipSelection}
+                type="button"
+              >
+                {clipMode ? <X size={13} /> : <Scissors size={13} />}
+                {clipMode ? "Cancel" : "Create clip"}
+              </button>
+            </div>
           </div>
+
+          {clipMode && (
+            <div className="clip-selection-bar" role="status">
+              <div>
+                <strong>
+                  {clipSelection.start === null
+                    ? "Choose a start turn"
+                    : clipSelection.end === null
+                      ? "Now choose an end turn"
+                      : `${selectedClip?.start}–${selectedClip?.endTime}`}
+                </strong>
+                <span>
+                  {selectedClip
+                    ? `${selectedClip.lines.length} ${selectedClip.lines.length === 1 ? "turn" : "turns"} · ${formatDuration(selectedClip.durationSeconds)}`
+                    : "Select a short contiguous transcript range."}
+                </span>
+              </div>
+              <div className="clip-selection-actions">
+                {clipSelection.start !== null && (
+                  <button onClick={() => setClipSelection({ start: null, end: null })} type="button">Clear</button>
+                )}
+                <button
+                  className="clip-share-action"
+                  disabled={!selectedClip}
+                  onClick={() => selectedClip && setShareClip(selectedClip)}
+                  type="button"
+                >
+                  <Share2 size={12} /> Share clip
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="transcript-scroll">
             <ol className="transcript-list" aria-label="Meeting transcript">
@@ -284,6 +461,14 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
                 const isHighlight = highlightedTimestamps.has(line.timestamp);
                 const linkedActions = actionItemsByTimestamp.get(line.timestamp);
                 const isFocused = focusedTimestamp === line.timestamp;
+                const isClipSelected = clipSelection.start !== null
+                  && index >= clipSelection.start
+                  && index <= (clipSelection.end ?? clipSelection.start);
+                const clipBoundary = index === clipSelection.start
+                  ? "start"
+                  : index === clipSelection.end
+                    ? "end"
+                    : undefined;
 
                 return (
                   <li
@@ -295,9 +480,13 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
                     }}
                   >
                     <button
+                      aria-label={clipMode
+                        ? `${clipSelection.start === null || clipSelection.end !== null ? "Set clip start" : "Set clip end"} at ${line.timestamp}, ${line.speaker}`
+                        : `Seek recording to ${line.timestamp}, ${line.speaker}`}
                       aria-current={active ? "true" : undefined}
-                      className={`transcript-turn ${active ? "active" : ""} ${isHighlight ? "has-highlight" : ""} ${linkedActions ? "has-action" : ""} ${isFocused ? "is-focused" : ""}`}
-                      onClick={() => seekTo(line.seconds)}
+                      aria-pressed={clipMode ? isClipSelected : undefined}
+                      className={`transcript-turn ${active ? "active" : ""} ${isHighlight ? "has-highlight" : ""} ${linkedActions ? "has-action" : ""} ${isFocused ? "is-focused" : ""} ${isClipSelected ? "is-clip-selected" : ""}`}
+                      onClick={() => selectTranscriptTurn(index)}
                       type="button"
                     >
                       <span
@@ -318,6 +507,11 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
                             {linkedActions && <span className="transcript-label is-action"><CheckSquare2 size={10} />Action item</span>}
                           </span>
                         )}
+                        {clipBoundary && (
+                          <span className="transcript-labels">
+                            <span className="transcript-label is-clip"><Scissors size={10} />Clip {clipBoundary}</span>
+                          </span>
+                        )}
                         <span className="transcript-text">{line.text}</span>
                       </span>
                       <span className="active-turn-marker" aria-hidden="true" />
@@ -330,6 +524,69 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
         </section>
       </div>
 
+      <section className="ask-meeting-panel" aria-labelledby="ask-meeting-heading">
+        <div className="ask-meeting-heading">
+          <span><MessageCircleQuestion size={18} /></span>
+          <div>
+            <p className="eyebrow">Answers from this meeting</p>
+            <h2 id="ask-meeting-heading">Ask this meeting</h2>
+            <p>Get an instant answer from this meeting&apos;s notes, actions, and transcript.</p>
+          </div>
+        </div>
+
+        <div className="ask-meeting-interaction">
+          <div className="ask-suggestions" aria-label="Suggested questions">
+            {suggestedQuestions.map((question) => (
+              <button disabled={isAnswering} key={question} onClick={() => askMeeting(question)} type="button">
+                {question}
+              </button>
+            ))}
+          </div>
+          <form
+            className="ask-meeting-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              askMeeting(askQuestion);
+            }}
+          >
+            <input
+              aria-label="Ask a question about this meeting"
+              disabled={isAnswering}
+              onChange={(event) => setAskQuestion(event.target.value)}
+              placeholder="Ask about decisions, follow-ups, or risks…"
+              value={askQuestion}
+            />
+            <button aria-label="Ask this meeting" disabled={!askQuestion.trim() || isAnswering} type="submit">
+              {isAnswering ? <span className="ask-loading-dot" /> : <Send size={15} />}
+            </button>
+          </form>
+
+          <div aria-live="polite">
+            {isAnswering && (
+              <div className="ask-answer-loading" role="status">
+                <span /><span /><span />
+              </div>
+            )}
+            {askAnswer && !isAnswering && (
+              <div className="ask-answer">
+                <strong>Answer</strong>
+                <p>{askAnswer.text}</p>
+                {askAnswer.sources.length > 0 && (
+                  <div className="ask-sources">
+                    <span>Sources</span>
+                    {askAnswer.sources.map((source) => (
+                      <button key={`${source.timestamp}-${source.label}`} onClick={() => seekToMoment(source.timestamp)} type="button">
+                        {source.timestamp} · {source.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
       <div className="meeting-insights-grid">
         <section className="summary-panel" aria-labelledby="summary-heading">
           <div className="summary-heading-row">
@@ -339,6 +596,15 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
             </div>
 
             <div className="summary-controls">
+              <button
+                className="summary-regenerate-button"
+                disabled={isRegenerating}
+                onClick={regenerateSummary}
+                type="button"
+              >
+                <RefreshCw className={isRegenerating ? "is-spinning" : ""} size={14} />
+                {isRegenerating ? "Regenerating" : "Regenerate"}
+              </button>
               <div className="summary-template-control">
                 <button
                   aria-expanded={templateMenuOpen}
@@ -422,10 +688,20 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
           )}
 
           <div
+            aria-busy={isRegenerating}
             className={`summary-content ${isSwitchingTemplate ? "is-switching" : ""}`}
             data-summary-template={summaryTemplate}
           >
-            {summaryTemplate === "enhanced" ? (
+            {isRegenerating ? (
+              <div className="summary-regenerate-skeleton" role="status">
+                <span className="sr-only">Regenerating the {summaryTemplates[summaryTemplate].label} summary</span>
+                {Array.from({ length: summaryTemplate === "enhanced" ? meeting.summary.length : 3 }, (_, index) => (
+                  <div key={index}>
+                    <i /><span /><span />
+                  </div>
+                ))}
+              </div>
+            ) : summaryTemplate === "enhanced" ? (
               <div className="enhanced-summary">
                 {meeting.summary.map((section, index) => (
                   <article className="summary-section" key={section.heading}>
@@ -475,7 +751,11 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
               </div>
             )}
           </div>
-          <span className="sr-only" aria-live="polite">{summaryTemplates[summaryTemplate].label} summary template selected</span>
+          <span className="sr-only" aria-live="polite">
+            {isRegenerating
+              ? `Regenerating the ${summaryTemplates[summaryTemplate].label} summary`
+              : `${summaryTemplates[summaryTemplate].label} summary ready`}
+          </span>
         </section>
 
         <aside className="meeting-insights-sidebar" aria-label="Meeting follow-up">
@@ -561,6 +841,33 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
               ))}
             </div>
           </section>
+
+          <section className="talk-time-panel" aria-labelledby="talk-time-heading">
+            <div className="insight-panel-heading">
+              <div>
+                <p className="eyebrow"><BarChart3 size={12} />Analytics</p>
+                <h2 id="talk-time-heading">Talk time</h2>
+              </div>
+              <span>{meeting.participants.length}</span>
+            </div>
+            <p className="talk-time-note">Estimated from the time between seeded transcript turns.</p>
+            <div className="talk-time-list">
+              {talkTime.map(({ participant, percentage, seconds }) => (
+                <div className="talk-time-row" key={participant.name}>
+                  <span className="mini-avatar" style={{ background: participant.color }}>{participant.initials}</span>
+                  <div>
+                    <div className="talk-time-label">
+                      <strong>{participant.name}</strong>
+                      <span>{percentage.toFixed(1)}% · {formatDuration(seconds)}</span>
+                    </div>
+                    <div className="talk-time-track" aria-hidden="true">
+                      <i style={{ background: participant.color, width: `${percentage}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </aside>
       </div>
       {shareTarget !== undefined && (
@@ -568,6 +875,13 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
           meeting={meeting}
           moment={shareTarget ?? undefined}
           onClose={() => setShareTarget(undefined)}
+        />
+      )}
+      {shareClip && (
+        <ShareDialog
+          clip={shareClip}
+          meeting={meeting}
+          onClose={() => setShareClip(undefined)}
         />
       )}
     </main>

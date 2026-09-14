@@ -3,17 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Link2, Share2, X } from "lucide-react";
 import type { Meeting } from "@/data/meetings";
-import { getMomentId, type ShareableMoment } from "@/lib/sharing";
+import { getMomentId, type ShareableClip, type ShareableMoment } from "@/lib/sharing";
+import { formatDuration } from "@/lib/formatters";
 
 type CopyStatus = "idle" | "copied" | "error";
 
 export function ShareDialog({
   meeting,
   moment,
+  clip,
   onClose,
 }: {
   meeting: Meeting;
   moment?: ShareableMoment;
+  clip?: ShareableClip;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -24,9 +27,14 @@ export function ShareDialog({
 
   const sharePath = useMemo(() => {
     const base = `/share/${meeting.id}`;
+    if (clip) {
+      const query = new URLSearchParams({ clipStart: clip.start, clipEnd: clip.end });
+      return `${base}?${query.toString()}`;
+    }
     return moment ? `${base}?moment=${encodeURIComponent(getMomentId(moment))}` : base;
-  }, [meeting.id, moment]);
+  }, [clip, meeting.id, moment]);
   const shareUrl = origin ? `${origin}${sharePath}` : sharePath;
+  const isClip = Boolean(clip);
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement | null;
@@ -115,11 +123,16 @@ export function ShareDialog({
         </div>
 
         <div className="share-dialog-copy">
-          <p className="eyebrow">{moment ? "Share a moment" : "Share meeting"}</p>
-          <h2 id="share-dialog-title">{moment ? moment.title : meeting.title}</h2>
+          <p className="eyebrow">{isClip ? "Share transcript clip" : moment ? "Share a moment" : "Share meeting"}</p>
+          <h2 id="share-dialog-title">{isClip ? "Selected meeting moment" : moment ? moment.title : meeting.title}</h2>
           {moment && <p className="share-dialog-context">From {meeting.title} · {moment.timestamp}</p>}
+          {clip && (
+            <p className="share-dialog-context">
+              From {meeting.title} · {clip.start}–{clip.endTime} · {formatDuration(clip.durationSeconds)}
+            </p>
+          )}
           <p id="share-dialog-description">
-            Anyone with this link can view {moment ? "this moment and its meeting context" : "this meeting summary"}, even if they weren&apos;t on the call.
+            Anyone with this link can view {isClip ? "this transcript range and its meeting context" : moment ? "this moment and its meeting context" : "this meeting summary"}, even if they weren&apos;t on the call.
           </p>
         </div>
 

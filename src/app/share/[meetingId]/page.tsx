@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, Clock3, ExternalLink, Flag, Quote, ShieldCheck, Users } from "lucide-react";
+import { CalendarDays, Clock3, ExternalLink, Flag, Quote, Scissors, ShieldCheck, Users } from "lucide-react";
 import { meetings } from "@/data/meetings";
 import { formatDuration, formatMeetingDate } from "@/lib/formatters";
-import { getMomentById, getMomentId } from "@/lib/sharing";
+import { getMomentById, getMomentId, getTranscriptClip } from "@/lib/sharing";
 
 export function generateStaticParams() {
   return meetings.map((meeting) => ({ meetingId: meeting.id }));
@@ -25,7 +25,11 @@ export default async function SharedMeetingPage({ params, searchParams }: PagePr
   if (!meeting) notFound();
 
   const momentId = typeof query.moment === "string" ? query.moment : undefined;
+  const clipStart = typeof query.clipStart === "string" ? query.clipStart : undefined;
+  const clipEnd = typeof query.clipEnd === "string" ? query.clipEnd : undefined;
+  const clipRequested = Boolean(clipStart || clipEnd);
   const sharedMoment = getMomentById(meeting, momentId);
+  const sharedClip = getTranscriptClip(meeting, clipStart, clipEnd);
   const transcriptLine = sharedMoment
     ? meeting.transcript.find((line) => line.timestamp === sharedMoment.timestamp)
     : undefined;
@@ -66,6 +70,12 @@ export default async function SharedMeetingPage({ params, searchParams }: PagePr
           </div>
         )}
 
+        {clipRequested && !sharedClip && (
+          <div className="shared-moment-unavailable" role="status">
+            That shared transcript clip isn&apos;t available, but the meeting recap is still here.
+          </div>
+        )}
+
         {sharedMoment && (
           <section className="shared-focus-moment" aria-labelledby="shared-moment-heading">
             <div className="shared-focus-label"><Flag size={13} /> Shared moment</div>
@@ -89,6 +99,36 @@ export default async function SharedMeetingPage({ params, searchParams }: PagePr
                 </footer>
               </blockquote>
             )}
+          </section>
+        )}
+
+        {sharedClip && (
+          <section className="shared-focus-moment shared-clip-moment" aria-labelledby="shared-clip-heading">
+            <div className="shared-focus-label"><Scissors size={13} /> Shared transcript clip</div>
+            <div className="shared-focus-heading">
+              <div>
+                <time>{sharedClip.start}–{sharedClip.endTime}</time>
+                <h2 id="shared-clip-heading">Selected meeting moment</h2>
+                <p>{sharedClip.lines.length} {sharedClip.lines.length === 1 ? "turn" : "turns"} · {formatDuration(sharedClip.durationSeconds)} · Transcript and timestamp range only</p>
+              </div>
+              <span className="shared-signal" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+            </div>
+            <ol className="shared-clip-transcript" aria-label="Shared transcript excerpt">
+              {sharedClip.lines.map((line) => {
+                const participant = meeting.participants.find((person) => person.name === line.speaker);
+                return (
+                  <li key={`${line.timestamp}-${line.speaker}`}>
+                    <span className="mini-avatar" style={{ background: participant?.color ?? "#3f4248" }}>
+                      {participant?.initials ?? line.speaker.slice(0, 2).toUpperCase()}
+                    </span>
+                    <div>
+                      <span><strong>{line.speaker}</strong><time>{line.timestamp}</time></span>
+                      <p>{line.text}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </section>
         )}
 

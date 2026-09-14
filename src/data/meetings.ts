@@ -20,7 +20,7 @@ export type Meeting = {
   participants: Participant[];
   transcript: TranscriptLine[];
   summary: { heading: string; body: string }[];
-  actionItems: { owner: string; task: string; due?: string }[];
+  actionItems: { owner: string; task: string; due?: string; timestamp?: string }[];
   highlights: { timestamp: string; title: string; note: string }[];
   clips: { id: string; title: string; start: string; end: string; shareable: boolean }[];
   status: "shared" | "private";
@@ -60,7 +60,7 @@ export const meetings: Meeting[] = [
       { heading: "Key takeaways", body: "Recording, transcription, and moment capture worked as expected during the short test." },
     ],
     actionItems: [
-      { owner: "Syed Huzaifa", task: "Confirm the processed transcript is available in the workspace.", due: "Today" },
+      { owner: "Syed Huzaifa", task: "Confirm the processed transcript is available in the workspace.", due: "Today", timestamp: "01:58" },
     ],
     highlights: [
       { timestamp: "01:31", title: "Creating a shareable moment", note: "Jonah demonstrates when to mark a key moment." },
@@ -99,8 +99,8 @@ export const meetings: Meeting[] = [
       { heading: "Design notes", body: "Reduce the welcome flow to three focused screens and keep data import optional." },
     ],
     actionItems: [
-      { owner: "Jonah Brooks", task: "Publish the revised three-screen onboarding prototype.", due: "Sep 15" },
-      { owner: "Elena Rossi", task: "Add the progressive-permission experiment flag.", due: "Sep 17" },
+      { owner: "Jonah Brooks", task: "Publish the revised three-screen onboarding prototype.", due: "Sep 15", timestamp: "12:17" },
+      { owner: "Elena Rossi", task: "Add the progressive-permission experiment flag.", due: "Sep 17", timestamp: "28:09" },
     ],
     highlights: [
       { timestamp: "14:46", title: "The activation insight", note: "Naomi connects sample data to faster activation." },
@@ -152,9 +152,9 @@ export const meetings: Meeting[] = [
       { heading: "Risks", body: "Evaluation labeling and customer approvals are the two schedule-sensitive dependencies." },
     ],
     actionItems: [
-      { owner: "Aisha Rahman", task: "Draft the launch narrative and channel plan.", due: "Sep 18" },
-      { owner: "Daniel Ortiz", task: "Consolidate enterprise security objections.", due: "Sep 16" },
-      { owner: "Marcus Lee", task: "Request approval for three customer stories.", due: "Sep 19" },
+      { owner: "Aisha Rahman", task: "Draft the launch narrative and channel plan.", due: "Sep 18", timestamp: "16:08" },
+      { owner: "Daniel Ortiz", task: "Consolidate enterprise security objections.", due: "Sep 16", timestamp: "56:18" },
+      { owner: "Marcus Lee", task: "Request approval for three customer stories.", due: "Sep 19", timestamp: "55:06" },
     ],
     highlights: [
       { timestamp: "22:38", title: "Security is a buying prerequisite", note: "Daniel summarizes the most common enterprise blocker." },
@@ -182,7 +182,7 @@ export const meetings: Meeting[] = [
       { heading: "Opportunity", body: "Connect decisions to their source moments and make cross-meeting retrieval feel immediate." },
     ],
     actionItems: [
-      { owner: "Marcus Lee", task: "Send Theo a workspace search prototype.", due: "Sep 15" },
+      { owner: "Marcus Lee", task: "Send Theo a workspace search prototype.", due: "Sep 15", timestamp: "19:14" },
       { owner: "Maya Chen", task: "Add decision provenance to the discovery brief." },
     ],
     highlights: [
@@ -208,8 +208,8 @@ export const meetings: Meeting[] = [
       { heading: "This week", body: "Expand regression coverage before tuning the speaker attribution model." },
     ],
     actionItems: [
-      { owner: "Syed Huzaifa", task: "Add a shared-room regression fixture.", due: "Sep 11" },
-      { owner: "Priya Nair", task: "Segment attribution errors by participant count." },
+      { owner: "Syed Huzaifa", task: "Add a shared-room regression fixture.", due: "Sep 11", timestamp: "15:01" },
+      { owner: "Priya Nair", task: "Segment attribution errors by participant count.", timestamp: "09:32" },
     ],
     highlights: [
       { timestamp: "03:05", title: "Latency is back on target", note: "Elena confirms the queue change resolved the incident." },

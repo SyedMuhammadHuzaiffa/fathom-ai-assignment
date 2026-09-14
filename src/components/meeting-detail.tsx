@@ -16,12 +16,15 @@ import {
   Pause,
   Play,
   Settings2,
+  Share2,
   Sparkles,
   Users,
   X,
 } from "lucide-react";
 import type { Meeting } from "@/data/meetings";
 import { formatDuration, formatMeetingDate } from "@/lib/formatters";
+import type { ShareableMoment } from "@/lib/sharing";
+import { ShareDialog } from "@/components/share-dialog";
 
 type SummaryTemplate = "enhanced" | "demo";
 
@@ -65,6 +68,7 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
   const [isSwitchingTemplate, setIsSwitchingTemplate] = useState(false);
   const [completedActions, setCompletedActions] = useState<Set<number>>(() => new Set());
   const [focusedTimestamp, setFocusedTimestamp] = useState<string | null>(null);
+  const [shareTarget, setShareTarget] = useState<ShareableMoment | null | undefined>(undefined);
   const currentTimeRef = useRef(0);
   const transcriptRefs = useRef(new Map<string, HTMLLIElement>());
   const templateTimerRef = useRef<number | null>(null);
@@ -173,7 +177,13 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
       <header className="meeting-detail-header">
         <div className="meeting-detail-title">
           <p className="eyebrow">Meeting recording</p>
-          <h1>{meeting.title}</h1>
+          <div className="meeting-title-action-row">
+            <h1>{meeting.title}</h1>
+            <button className="meeting-share-button" onClick={() => setShareTarget(null)} type="button">
+              <Share2 size={15} />
+              Share
+            </button>
+          </div>
           <div className="detail-meta">
             <span><CalendarDays size={14} />{formatMeetingDate(meeting.date)} · {meeting.time}</span>
             <span><Clock3 size={14} />{formatDuration(meeting.durationSeconds)}</span>
@@ -526,25 +536,40 @@ export function MeetingDetail({ meeting }: { meeting: Meeting }) {
 
             <div className="highlights-list">
               {meeting.highlights.map((highlight) => (
-                <button
+                <div
                   className="highlight-item"
                   data-highlight-timestamp={highlight.timestamp}
                   key={highlight.timestamp}
-                  onClick={() => seekToMoment(highlight.timestamp)}
-                  type="button"
                 >
-                  <span className="highlight-play"><Play fill="currentColor" size={12} /></span>
-                  <span>
+                  <button
+                    aria-label={`Play ${highlight.title} at ${highlight.timestamp}`}
+                    className="highlight-play"
+                    onClick={() => seekToMoment(highlight.timestamp)}
+                    type="button"
+                  >
+                    <Play fill="currentColor" size={12} />
+                  </button>
+                  <button className="highlight-copy" onClick={() => seekToMoment(highlight.timestamp)} type="button">
                     <span className="highlight-time">{highlight.timestamp}</span>
                     <strong>{highlight.title}</strong>
                     <small>{highlight.note}</small>
-                  </span>
-                </button>
+                  </button>
+                  <button className="highlight-share-button" onClick={() => setShareTarget(highlight)} type="button">
+                    <Share2 size={12} /> Share
+                  </button>
+                </div>
               ))}
             </div>
           </section>
         </aside>
       </div>
+      {shareTarget !== undefined && (
+        <ShareDialog
+          meeting={meeting}
+          moment={shareTarget ?? undefined}
+          onClose={() => setShareTarget(undefined)}
+        />
+      )}
     </main>
   );
 }
